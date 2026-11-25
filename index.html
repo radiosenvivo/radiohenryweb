@@ -44,13 +44,13 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
     }
 
     .cover {
-      width: 160px;
-      height: 160px;
-      border-radius: 40%;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
       overflow: hidden;
       flex-shrink: 0;
       border: 3px solid #2c303a;
@@ -68,10 +68,49 @@
 
     .player-wrapper {
       width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
     }
 
-    #emisora-pro-widget {
-      max-width: 100% !important;
+    audio {
+      width: 100%;
+      height: 40px;
+      border-radius: 8px;
+    }
+
+    /* Estilos para el now playing */
+    .now-playing {
+      width: 100%;
+      text-align: center;
+      padding: 10px 8px 4px;
+      border-top: 1px solid #2c303a;
+      margin-top: 4px;
+    }
+
+    .now-playing .label {
+      font-size: 0.7rem;
+      color: #6c757d;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .now-playing .song-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #f8f9fa;
+      line-height: 1.3;
+      margin-bottom: 2px;
+      word-break: break-word;
+    }
+
+    .now-playing .song-artist {
+      font-size: 0.85rem;
+      color: #adb5bd;
+      line-height: 1.3;
+      word-break: break-word;
     }
 
     .footer {
@@ -110,34 +149,95 @@
       </div>
 
       <div class="player-wrapper">
-        <div id="emisora-pro-widget"
-             data-title="Radio Henry Web"
-             data-emisora-pro="radio-henry-radio"
-             data-script="https://wiget-emisora.pages.dev/radio_web_player.js"></div>
-        <script src="https://wiget-emisora.pages.dev/wiget.js"></script>
+        <audio id="radio-player" controls preload="none">
+          <source src="https://stream.zeno.fm/73bvgeu2f78uv" type="audio/mpeg">
+          Tu navegador no soporta el elemento de audio.
+        </audio>
+
+        <div class="now-playing">
+          <div class="label">En reproducción</div>
+          <div class="song-title" id="song-title">Cargando…</div>
+          <div class="song-artist" id="song-artist">—</div>
+        </div>
       </div>
     </div>
 
     <div class="footer">
-      Radio Henry Web· Señal en vivo
+      Radio Henry Web · Señal en vivo
     </div>
 
   </div>
 
   <script>
     (function () {
-      if ('mediaSession' in navigator) {
-        try {
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: 'Radio Henry Web',
-            artist: 'Señal en vivo',
-            album: 'Radio Henry',
-            artwork: [
-              { src: 'https://imgfz.com/i/umKbrAt.jpeg', sizes: '512x512', type: 'image/jpeg' }
-            ]
-          });
-        } catch (e) {}
+      const STREAM_URL = 'https://stream.zeno.fm/73bvgeu2f78uv';
+      const METADATA_URL = 'https://api.zeno.fm/mounts/metadata/subscribe/73bvgeu2f78uv';
+
+      const titleEl = document.getElementById('song-title');
+      const artistEl = document.getElementById('song-artist');
+      const audio = document.getElementById('radio-player');
+
+      function updateMediaSession(title, artist) {
+        if ('mediaSession' in navigator) {
+          try {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: title || 'Radio Henry Web',
+              artist: artist || 'Señal en vivo',
+              album: 'Radio Henry',
+              artwork: [
+                { src: 'https://imgfz.com/i/umKbrAt.jpeg', sizes: '512x512', type: 'image/jpeg' }
+              ]
+            });
+          } catch (e) {}
+        }
       }
+
+      // Inicializar Media Session
+      updateMediaSession('Radio Henry Web', 'Señal en vivo');
+
+      // Conexión a la API de metadatos de Zeno (SSE)
+      function connectMetadata() {
+        const es = new EventSource(METADATA_URL);
+
+        es.onmessage = function (event) {
+          try {
+            const data = JSON.parse(event.data);
+            const streamTitle = data.streamTitle || '';
+
+            if (!streamTitle) {
+              titleEl.textContent = 'Señal en vivo';
+              artistEl.textContent = 'Radio Henry';
+              updateMediaSession('Radio Henry Web', 'Señal en vivo');
+              return;
+            }
+
+            // Formato habitual: "Artista - Título"
+            let artist = '';
+            let title = streamTitle;
+
+            const sepIndex = streamTitle.indexOf(' - ');
+            if (sepIndex > -1) {
+              artist = streamTitle.substring(0, sepIndex).trim();
+              title = streamTitle.substring(sepIndex + 3).trim();
+            }
+
+            titleEl.textContent = title || streamTitle;
+            artistEl.textContent = artist || '—';
+
+            updateMediaSession(title || streamTitle, artist || 'Radio Henry');
+          } catch (err) {
+            console.warn('Error parseando metadatos:', err);
+          }
+        };
+
+        es.onerror = function () {
+          // Reintentar automáticamente después de un momento
+          es.close();
+          setTimeout(connectMetadata, 5000);
+        };
+      }
+
+      connectMetadata();
     })();
   </script>
 
